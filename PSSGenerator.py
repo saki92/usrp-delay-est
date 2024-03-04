@@ -1,5 +1,5 @@
 PSS_LENGTH = 127
-def get_x_sequence():
+def get_x_sequence() -> list[int]:
 
     x = [0,1,1,0,1,1,1]
 
