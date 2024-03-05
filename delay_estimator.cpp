@@ -77,6 +77,10 @@ void transmit_worker(const std::vector<std::complex<float> *> buffs,
     md.time_spec = uhd::time_spec_t::from_ticks(
         timestamp + (repeat_cnt * samples_per_buff), sample_rate);
     md.start_of_burst = false;
+    //std::cout << boost::format("sent %d samples. next ts %ld") %
+    //                 (samples_sent) %
+    //                 (timestamp + (repeat_cnt * samples_per_buff))
+    //          << std::endl;
   }
   // send a mini EOB packet
   md.end_of_burst = true;
@@ -149,7 +153,7 @@ int UHD_SAFE_MAIN(int argc, char *argv[]) {
   std::string args, tx_file, rx_file, subdev, ref, wirefmt;
   int channel, spb, repeat;
   double seconds_in_future, rate, freq, lo_offset, tx_gain, rx_gain, bw,
-      setup_time, repeat_delay;
+      setup_time, repeat_delay, first_samp_time;
 
   po::options_description desc("Allowed options");
   // clang-format off
@@ -168,6 +172,7 @@ int UHD_SAFE_MAIN(int argc, char *argv[]) {
       ("rx-gain", po::value<double>(&rx_gain)->default_value(0.0), "gain of the Rx RF chain")
       ("bw", po::value<double>(&bw), "analog frontend filter bandwidth in Hz")
       ("setup", po::value<double>(&setup_time)->default_value(1.0), "seconds of setup time")
+      ("first-sample-time", po::value<double>(&first_samp_time)->default_value(0.1), "delay in sending/receiving the first sample")
       ("wirefmt", po::value<std::string>(&wirefmt)->default_value("sc16"), "wire format (sc8 or sc16)")
       ("spb", po::value<int>(&spb)->default_value(10000), "samples per buffer")
       ("repeat", po::value<int>(&repeat)->default_value(10), "repeat transmit file times")
@@ -333,6 +338,7 @@ int UHD_SAFE_MAIN(int argc, char *argv[]) {
                 tx_buff.size() * sizeof(std::complex<float>));
     num_tx_samps += int(infile.gcount() / sizeof(std::complex<float>));
   }
+  std::cout << boost::format("Read %d samples from file %s") % (num_tx_samps) % (tx_file.c_str()) << std::endl;
   infile.close();
 
   // create a receive streamer
@@ -349,15 +355,22 @@ int UHD_SAFE_MAIN(int argc, char *argv[]) {
   uhd::time_spec_t current_time = usrp->get_time_now();
 
   uhd::time_spec_t first_sample_time =
-      current_time + uhd::time_spec_t(setup_time);
+      current_time + uhd::time_spec_t(first_samp_time);
 
   // start transmit worker thread
   std::thread transmit_thread([&]() {
-    transmit_worker(tx_buffs, tx_stream, first_sample_time, spb, repeat, rate);
+    transmit_worker(tx_buffs, tx_stream, first_sample_time, num_tx_samps,
+                    repeat, rate);
   });
 
   // start receive worker in same thread
-  receive_worker(rx_file, rx_stream, first_sample_time, spb, repeat, rate);
+  receive_worker(rx_file, rx_stream, first_sample_time, num_tx_samps, repeat,
+                 rate);
 
+  if (transmit_thread.joinable()) {
+    transmit_thread.join();
+  };
+  // finished
+  std::cout << std::endl << "Done!" << std::endl << std::endl;
   return EXIT_SUCCESS;
 }
