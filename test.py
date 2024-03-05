@@ -54,22 +54,28 @@ def test(args):
     write_vector_to_file(args.write_file, y)
     # extact only real part of y
     yr = y[0::2]
-    z = read_vector_from_file(args.read_file)
-    n = 1
-    z = z[n*y.size:(n+1)*y.size] # nth repeation of received signal
-    # extact only real part of z
-    zr = z[0::2]
-    # zr = np.roll(zr, -3) # test delay
-    cc = cross_correlation(yr, zr)
-    delay = cc.argmax() - zr.size + 1
+    zin = read_vector_from_file(args.read_file)
+    n = args.repeat - 1
+    delays = np.zeros(args.repeat - 2, dtype=int)
+    ii = 0
+    for i in range(1,n):
+        z = zin[i*y.size:(i+1)*y.size] # nth repetition of received signal
+        # extact only real part of z
+        zr = z[0::2]
+        cc = cross_correlation(zr, yr)
+        delays[ii] = cc.argmax() - zr.size + 1
+        ii += 1
+    # get mean from all repetitions
+    delay = np.mean(delays)
     delay_time = delay * (1/args.sample_freq)
+    delays
     print(f"The estimated delay is {delay} samples, {delay_time} seconds.")
 
     if args.plot:
         fig, axs = plt.subplots(3)
         fig.suptitle("Cross-correlation")
         axs[0].plot(range(yr.size), yr)
-        axs[1].plot(range(zr.size), zr)
+        axs[1].plot(range(zin[n*y.size:(n+1)*y.size:2].size), zin[n*y.size:(n+1)*y.size:2])
         axs[2].plot(range(cc.size), cc)
         plt.show()
 
@@ -100,5 +106,9 @@ if __name__ == "__main__":
     parser.add_argument('--plot',
                         default=False,
                         action='store_true')
+    parser.add_argument('--repeat',
+                        type=int,
+                        default=10,
+                        help='Number of times the signal vector repeats')
     args = parser.parse_args()
     test(args)
