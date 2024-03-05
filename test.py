@@ -54,10 +54,12 @@ def test(args):
     write_vector_to_file(args.write_file, y)
     # extact only real part of y
     yr = y[0::2]
-    z = read_vector_from_file(args.write_file)
+    z = read_vector_from_file(args.read_file)
+    n = 1
+    z = z[n*y.size:(n+1)*y.size] # nth repeation of received signal
     # extact only real part of z
     zr = z[0::2]
-    zr = np.roll(zr, -3) # test delay
+    # zr = np.roll(zr, -3) # test delay
     cc = cross_correlation(yr, zr)
     delay = cc.argmax() - zr.size + 1
     delay_time = delay * (1/args.sample_freq)
@@ -87,10 +89,14 @@ if __name__ == "__main__":
                         default=10e6,
                         type=float,
                         help='Sampling frequency in Hz')
-    parser.add_argument('write_file',
+    parser.add_argument('--write_file',
                         type=str,
                         default='tx_usrp_samples.dat',
                         help='File name to write the signal vector to')
+    parser.add_argument('--read_file',
+                        type=str,
+                        default='rx_usrp_samples.dat',
+                        help='File name to read the signal vector from')
     parser.add_argument('--plot',
                         default=False,
                         action='store_true')
