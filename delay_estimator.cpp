@@ -73,10 +73,10 @@ void transmit_worker(const std::vector<std::complex<float> *> buffs,
                                      << samples_sent << " sent).");
       return;
     }
-    md.time_spec =
-        uhd::time_spec_t::from_ticks(timestamp + samples_per_buff, sample_rate);
-    md.start_of_burst = false;
     repeat_cnt++;
+    md.time_spec = uhd::time_spec_t::from_ticks(
+        timestamp + (repeat_cnt * samples_per_buff), sample_rate);
+    md.start_of_burst = false;
   }
   // send a mini EOB packet
   md.end_of_burst = true;
@@ -103,7 +103,7 @@ void receive_worker(const std::string &file, uhd::rx_streamer::sptr rx_streamer,
   rx_streamer->issue_stream_cmd(stream_cmd);
 
   int repeat_cnt = 0;
-  double timeout = 2.0f;
+  double timeout = 2.0f; // first rx packet. we wait for first_rx_time
   uhd::rx_metadata_t md;
   while (repeat_cnt < repeat_times) {
     int samples_received =
@@ -147,7 +147,7 @@ namespace po = boost::program_options;
 
 int UHD_SAFE_MAIN(int argc, char *argv[]) {
   std::string args, tx_file, rx_file, subdev, ref, wirefmt;
-  int channel, spb;
+  int channel, spb, repeat;
   double seconds_in_future, rate, freq, lo_offset, tx_gain, rx_gain, bw,
       setup_time, repeat_delay;
 
@@ -170,7 +170,7 @@ int UHD_SAFE_MAIN(int argc, char *argv[]) {
       ("setup", po::value<double>(&setup_time)->default_value(1.0), "seconds of setup time")
       ("wirefmt", po::value<std::string>(&wirefmt)->default_value("sc16"), "wire format (sc8 or sc16)")
       ("spb", po::value<int>(&spb)->default_value(10000), "samples per buffer")
-      ("repeat", "repeatedly transmit file")
+      ("repeat", po::value<int>(&repeat)->default_value(10), "repeat transmit file times")
   ;
   // clang-format on
   po::variables_map vm;
@@ -181,8 +181,6 @@ int UHD_SAFE_MAIN(int argc, char *argv[]) {
     std::cout << boost::format("USRP Delay Estimator %s") % desc << std::endl;
     return ~0;
   }
-
-  bool repeat = vm.count("repeat") > 0;
 
   uhd::set_thread_priority_safe();
 
@@ -301,6 +299,7 @@ int UHD_SAFE_MAIN(int argc, char *argv[]) {
               << std::endl;
   }
 
+  /*----------------------------------------------------*/
   // check ref and lock detect
   check_locked_sensor(
       usrp->get_rx_sensor_names(channel), "lo_locked",
@@ -335,6 +334,30 @@ int UHD_SAFE_MAIN(int argc, char *argv[]) {
     num_tx_samps += int(infile.gcount() / sizeof(std::complex<float>));
   }
   infile.close();
+
+  // create a receive streamer
+  uhd::stream_args_t rx_stream_args(cpu_format, wirefmt);
+  std::vector<size_t> rx_channel_num;
+  rx_channel_num.push_back(0); // we use only one channel
+  rx_stream_args.channels = rx_channel_num;
+  uhd::rx_streamer::sptr rx_stream = usrp->get_rx_stream(rx_stream_args);
+
+  // reset usrp time to prepare for transmit/receive
+  std::cout << boost::format("Setting device timestamp to 0...") << std::endl;
+  usrp->set_time_now(uhd::time_spec_t(0.0));
+
+  uhd::time_spec_t current_time = usrp->get_time_now();
+
+  uhd::time_spec_t first_sample_time =
+      current_time + uhd::time_spec_t(setup_time);
+
+  // start transmit worker thread
+  std::thread transmit_thread([&]() {
+    transmit_worker(tx_buffs, tx_stream, first_sample_time, spb, repeat, rate);
+  });
+
+  // start receive worker in same thread
+  receive_worker(rx_file, rx_stream, first_sample_time, spb, repeat, rate);
 
   return EXIT_SUCCESS;
 }

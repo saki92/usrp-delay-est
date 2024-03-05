@@ -89,6 +89,7 @@ if __name__ == "__main__":
                         help='Sampling frequency in Hz')
     parser.add_argument('write_file',
                         type=str,
+                        default='tx_usrp_samples.dat',
                         help='File name to write the signal vector to')
     parser.add_argument('--plot',
                         default=False,
