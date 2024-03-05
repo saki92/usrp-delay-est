@@ -1,3 +1,4 @@
+import os
 import argparse
 import PSSGenerator as PSG
 import numpy as np
@@ -47,12 +48,32 @@ def cross_correlation(a:np.ndarray, b:np.ndarray) -> np.ndarray:
     return c
 
 
+def send_and_receive_signal(args):
+    command = ['sudo', 'build/trx_timed_samples'] 
+    if args.usrp_type == 'x300':
+        command += ['--subdev', 'A:0']
+    else:
+        command += ['--subdev', 'A:A']
+    command += ['--rate', f'{args.sample_freq}']
+    command += ['--freq', f'{args.center_freq}']
+    command += ['--bw', '20e6']
+    command += ['--args', f'"type={args.usrp_type}"']
+    command += ['--first-sample-time', '0.1']
+    print("Sending and receiving samples")
+    command_to_run = f"""{' '.join(command)}"""
+    return os.system(command_to_run)
+
 def test(args):
     d = PSG.get_d_sequence(args.nid)
     x = np.array(d, dtype=np.float32) # convert int to float array
     y = get_signal_vector(args.symbol_duration, args.sample_freq, x, False)
     write_vector_to_file(args.write_file, y)
     # extact only real part of y
+    if send_and_receive_signal(args):
+        print("Error in sending signal")
+        return -1
+    else:
+        print("Success in sending and receiving samples")
     yr = y[0::2]
     zin = read_vector_from_file(args.read_file)
     n = args.repeat - 1
@@ -95,6 +116,10 @@ if __name__ == "__main__":
                         default=10e6,
                         type=float,
                         help='Sampling frequency in Hz')
+    parser.add_argument('--center_freq',
+                        type=float,
+                        default=3.6e9,
+                        help='Center frequency of carrier signal')
     parser.add_argument('--write_file',
                         type=str,
                         default='tx_usrp_samples.dat',
@@ -110,5 +135,9 @@ if __name__ == "__main__":
                         type=int,
                         default=10,
                         help='Number of times the signal vector repeats')
+    parser.add_argument('--usrp_type',
+                        type=str,
+                        default='x300',
+                        help='Type of USRP')
     args = parser.parse_args()
     test(args)

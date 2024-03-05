@@ -16,10 +16,10 @@ if(Boost_FOUND)
   message(STATUS "UHD_INCLUDE_DIRS: ${UHD_INCLUDE_DIRS}")
   message(STATUS "UHD_LIBRARIES: ${UHD_LIBRARIES}")
 
-  add_executable(delay_estimator delay_estimator.cpp)
+  add_executable(trx_timed_samples trx_timed_samples.cpp)
 
-  target_link_libraries(delay_estimator PRIVATE ${UHD_LIBRARIES} ${Boost_LIBRARIES})
-  target_include_directories(delay_estimator PRIVATE ${UHD_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
+  target_link_libraries(trx_timed_samples PRIVATE ${UHD_LIBRARIES} ${Boost_LIBRARIES})
+  target_include_directories(trx_timed_samples PRIVATE ${UHD_INCLUDE_DIRS} ${Boost_INCLUDE_DIRS})
 else()
   message(FATAL_ERROR "Boost not found! Please install Boost.")
 endif()
