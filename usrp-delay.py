@@ -3,6 +3,7 @@ import argparse
 import PSSGenerator as PSG
 import numpy as np
 import matplotlib.pyplot as plt
+import termplotlib as tplt
 
 def get_signal_vector(s:float, f:float, x:np.ndarray, do_plot:bool) -> np.ndarray:
     samp_per_symb = int(s * f)
@@ -54,6 +55,7 @@ def send_and_receive_signal(args):
         command += ['--subdev', 'A:0']
     else:
         command += ['--subdev', 'A:A']
+        command += ['--rx-gain', '30']
     command += ['--rate', f'{args.sample_freq}']
     command += ['--freq', f'{args.center_freq}']
     command += ['--bw', '20e6']
@@ -90,24 +92,42 @@ def test(args):
     delay = np.mean(delays)
     delay_time = delay * (1/args.sample_freq)
     delays
-    print(f"The estimated delay is {delay} samples, {delay_time} seconds.")
 
+    cc_x_plot = [yr.size - x for x in range(cc.size)]
     if args.plot:
         fig, axs = plt.subplots(3)
         fig.suptitle("Cross-correlation")
         axs[0].plot(range(yr.size), yr)
         axs[1].plot(range(zin[n*y.size:(n+1)*y.size:2].size), zin[n*y.size:(n+1)*y.size:2])
-        axs[2].plot(range(cc.size), cc)
+        axs[2].plot(cc_x_plot, cc)
         plt.show()
+    else:
+        print("Tx signal")
+        fig1 = tplt.figure()
+        fig1.plot(range(yr.size), yr)
+        fig1.show()
+        print()
+        print("Rx signal")
+        fig2 = tplt.figure()
+        fig2.plot(range(zin[n*y.size:(n+1)*y.size:2].size), zin[n*y.size:(n+1)*y.size:2])
+        fig2.show()
+        print()
+        print("Delay")
+        fig3 = tplt.figure()
+        fig3.plot(cc_x_plot, cc, label='Delay')
+        fig3.show()
+
+    print()
+    print(f"The estimated delay is {delay} samples, {delay_time} seconds.")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Arguments for PSS signal generator tool')
+    parser = argparse.ArgumentParser(description='Arguments for delay estimation tool')
     parser.add_argument('--nid',
                         default=0,
                         type=int,
                         choices=[0,1,2],
-                        help='Nid(2) of the NidCell')
+                        help='Nid(2) PSS signal')
     parser.add_argument('--symbol_duration',
                         default=3e-6,
                         type=float,

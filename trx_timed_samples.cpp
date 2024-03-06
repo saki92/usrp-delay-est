@@ -63,7 +63,7 @@ void transmit_worker(const std::vector<std::complex<float> *> buffs,
   md.has_time_spec = true;
   md.time_spec = first_tx_time;
   int64_t timestamp = first_tx_time.to_ticks(sample_rate);
-  std::cout << boost::format("first tx sample set at %ld") %
+  std::cout << boost::format("First tx sample set at %ld") %
                    (md.time_spec.to_ticks(sample_rate))
             << std::endl;
   int repeat_cnt = 0;
@@ -80,10 +80,10 @@ void transmit_worker(const std::vector<std::complex<float> *> buffs,
     md.time_spec = uhd::time_spec_t::from_ticks(
         timestamp + (repeat_cnt * samples_per_buff), sample_rate);
     md.start_of_burst = false;
-    std::cout << boost::format("sent %d samples. next ts %ld") %
-                     (samples_sent) %
-                     (timestamp + (repeat_cnt * samples_per_buff))
-              << std::endl;
+    //std::cout << boost::format("sent %d samples. next ts %ld") %
+    //                 (samples_sent) %
+    //                 (timestamp + (repeat_cnt * samples_per_buff))
+    //          << std::endl;
   }
   // send a mini EOB packet
   md.end_of_burst = true;
@@ -94,7 +94,7 @@ void receive_worker(const std::string &file, uhd::rx_streamer::sptr rx_streamer,
                     uhd::time_spec_t first_rx_time, size_t samples_per_buff,
                     int repeat_times, double sample_rate) {
 
-  std::vector<std::complex<float>> buff(samples_per_buff);
+  std::vector<std::complex<float>> buff(samples_per_buff * repeat_times + 2000);
   std::vector<std::complex<float> *> buff_ptr;
   buff_ptr.push_back(&buff.front());
 
@@ -106,62 +106,64 @@ void receive_worker(const std::string &file, uhd::rx_streamer::sptr rx_streamer,
   // setup streaming
   uhd::stream_cmd_t stream_cmd(uhd::stream_cmd_t::STREAM_MODE_START_CONTINUOUS);
   stream_cmd.stream_now = false;
-  stream_cmd.time_spec = first_rx_time;
-  std::cout << boost::format("first rx sample set at %ld") %
+  // start stream 1000 samples ahead
+  int64_t first_rx_samp = first_rx_time.to_ticks(sample_rate);
+  int64_t set_stream_samp = first_rx_samp - 1000;
+  stream_cmd.time_spec =
+      uhd::time_spec_t::from_ticks(set_stream_samp, sample_rate);
+  std::cout << boost::format("First rx sample set at %ld") %
                    (stream_cmd.time_spec.to_ticks(sample_rate))
             << std::endl;
   rx_streamer->issue_stream_cmd(stream_cmd);
 
-  int repeat_cnt = 0;
   double timeout = 2.0f; // first rx packet. we wait for first_rx_time
   uhd::rx_metadata_t md;
-  while (repeat_cnt < repeat_times) {
-    int samples_received = 0;
-    bool first_rx = true;
-    while (samples_received != samples_per_buff) {
-      samples_received += rx_streamer->recv(
-          (void *)((std::complex<float> *)buff_ptr[0] + samples_received),
-          samples_per_buff - samples_received, md, timeout);
-      if (first_rx) {
-        std::cout << boost::format("First rx timestamp %ld") %
-                         (md.time_spec.to_ticks(sample_rate))
-                  << std::endl;
-        first_rx = false;
-      }
-    }
-    timeout = 0.1f;
-
-    if (md.error_code == uhd::rx_metadata_t::ERROR_CODE_TIMEOUT) {
-      std::cout << "Timeout while streaming" << std::endl;
-      break;
-    }
-    if (md.error_code == uhd::rx_metadata_t::ERROR_CODE_OVERFLOW) {
-      if (overflow_message) {
-        overflow_message = false;
-        std::cerr << boost::format(
-                         "Got an overflow indication. Please consider the "
-                         "following:\n"
-                         "  Your write medium must sustain a rate of %fMB/s.\n"
-                         "  Dropped samples will not be written to the file.\n"
-                         "  Please modify this example for your purposes.\n"
-                         "  This message will not appear again.\n") %
-                         (sample_rate * sizeof(std::complex<float>) / 1e6);
-      }
-      continue;
-    }
-
-    if (md.error_code != uhd::rx_metadata_t::ERROR_CODE_NONE) {
-      throw std::runtime_error("Receiver error " + md.strerror());
-    }
-
-    outfile.write((const char *)&buff.front(),
-                  samples_received * sizeof(std::complex<float>));
-    repeat_cnt++;
-    // std::cout << boost::format("received %d samples with ts %ld") %
-    //                  (samples_received) %
-    //                  (md.time_spec.to_ticks(sample_rate))
-    //           << std::endl;
+  int samples_received = 0;
+  int nsamples = samples_per_buff * repeat_times + 1000;
+  while (samples_received != nsamples) {
+    samples_received += rx_streamer->recv(
+        (void *)((std::complex<float> *)buff_ptr[0] + samples_received),
+        nsamples - samples_received, md, timeout);
   }
+
+  if (md.error_code == uhd::rx_metadata_t::ERROR_CODE_TIMEOUT) {
+    std::cout << "Timeout while streaming" << std::endl;
+  }
+  if (md.error_code == uhd::rx_metadata_t::ERROR_CODE_OVERFLOW) {
+    if (overflow_message) {
+      overflow_message = false;
+      std::cerr << boost::format(
+                       "Got an overflow indication. Please consider the "
+                       "following:\n"
+                       "  Your write medium must sustain a rate of %fMB/s.\n"
+                       "  Dropped samples will not be written to the file.\n"
+                       "  Please modify this example for your purposes.\n"
+                       "  This message will not appear again.\n") %
+                       (sample_rate * sizeof(std::complex<float>) / 1e6);
+    }
+  }
+
+  if (md.error_code != uhd::rx_metadata_t::ERROR_CODE_NONE) {
+    throw std::runtime_error("Receiver error " + md.strerror());
+  }
+
+  int64_t first_stream_samp = md.time_spec.to_ticks(sample_rate);
+  std::cout << boost::format("First rx timestamp %ld") % (first_stream_samp)
+            << std::endl;
+
+  int64_t first_samp_buff = 0;
+  if (first_stream_samp > first_rx_samp) {
+    throw std::runtime_error("Streaming started too late!");
+    return;
+  } else {
+    first_samp_buff = first_rx_samp - first_stream_samp;
+  }
+
+  std::cout << boost::format("Buffer offset is %ld") % (first_samp_buff)
+            << std::endl;
+  outfile.write((const char *)&buff[first_samp_buff],
+                samples_per_buff * repeat_times * sizeof(std::complex<float>));
+
   stream_cmd.stream_mode = uhd::stream_cmd_t::STREAM_MODE_STOP_CONTINUOUS;
   rx_streamer->issue_stream_cmd(stream_cmd);
 
@@ -385,11 +387,7 @@ int UHD_SAFE_MAIN(int argc, char *argv[]) {
   });
 
   // start receive worker in same thread
-  int64_t rx_first_samp = first_sample_time.to_ticks(
-      rate); //-48; // b200 seem to start streaming with a dealy of 48 samples
-  uhd::time_spec_t rx_first_sample_time =
-      uhd::time_spec_t::from_ticks(rx_first_samp, rate);
-  receive_worker(rx_file, rx_stream, rx_first_sample_time, num_tx_samps, repeat,
+  receive_worker(rx_file, rx_stream, first_sample_time, num_tx_samps, repeat,
                  rate);
 
   if (transmit_thread.joinable()) {
