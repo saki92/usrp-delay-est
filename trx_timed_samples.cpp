@@ -71,9 +71,8 @@ void transmit_worker(const std::vector<std::complex<float> *> buffs,
     // send the entire contents of the buffer
     const int samples_sent = tx_streamer->send(buffs, samples_per_buff, md);
     if (samples_sent != samples_per_buff) {
-      UHD_LOG_ERROR("TX-STREAM", "The tx_stream timed out sending "
-                                     << samples_per_buff << " samples ("
-                                     << samples_sent << " sent).");
+      std::cout << boost::format("TX-STREAM", "The tx_stream timed out sending")
+                << std::endl;
       return;
     }
     repeat_cnt++;
@@ -236,6 +235,9 @@ int UHD_SAFE_MAIN(int argc, char *argv[]) {
   }
 
   /*------------- Tx setup -------------*/
+
+  usrp->set_master_clock_rate(rate);
+
   // set tx sample rate
   if (not vm.count("rate")) {
     std::cerr << "Please specify the sampling frequency with --rate"
