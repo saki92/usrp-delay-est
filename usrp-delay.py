@@ -55,12 +55,13 @@ def send_and_receive_signal(args):
         command += ['--subdev', 'A:0']
     else:
         command += ['--subdev', 'A:A']
-        command += ['--rx-gain', '30']
     command += ['--rate', f'{args.sample_freq}']
     command += ['--freq', f'{args.center_freq}']
     command += ['--bw', '20e6']
     command += ['--args', f'"type={args.usrp_type}"']
     command += ['--first-sample-time', '0.1']
+    command += ['--rx-gain', f'{args.rx_gain}']
+    command += ['--tx-gain', f'{args.tx_gain}']
     print("Sending and receiving samples")
     command_to_run = f"""{' '.join(command)}"""
     return os.system(command_to_run)
@@ -160,5 +161,13 @@ if __name__ == "__main__":
                         type=str,
                         default='x300',
                         help='Type of USRP')
+    parser.add_argument('--rx_gain',
+                        type=float,
+                        default=0,
+                        help='USRP Rx gain')
+    parser.add_argument('--tx_gain',
+                        type=float,
+                        default=0,
+                        help='USRP Tx gain')
     args = parser.parse_args()
     test(args)
