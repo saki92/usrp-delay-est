@@ -22,3 +22,9 @@ make
 `numpy`
 `argparse`
 `matplotlib`
+`termplotlib`
+
+## Usage
+```
+python3 usrp-delay.py --center_freq 3.6e9 --rx_gain 20 --tx_gain 20
+```
