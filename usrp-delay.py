@@ -62,6 +62,7 @@ def send_and_receive_signal(args):
     command += ['--first-sample-time', '0.1']
     command += ['--rx-gain', f'{args.rx_gain}']
     command += ['--tx-gain', f'{args.tx_gain}']
+    command += ['--spb', f'{args.tx_samples}']
     print("Sending and receiving samples")
     command_to_run = f"""{' '.join(command)}"""
     return os.system(command_to_run)
@@ -71,6 +72,7 @@ def test(args):
     x = np.array(d, dtype=np.float32) # convert int to float array
     y = get_signal_vector(args.symbol_duration, args.sample_freq, x, False)
     write_vector_to_file(args.write_file, y)
+    args.tx_samples = y.size
     # extact only real part of y
     if send_and_receive_signal(args):
         print("Error in sending signal")
