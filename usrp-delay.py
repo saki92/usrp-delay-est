@@ -86,7 +86,8 @@ def test(args):
         # extact only real part of z
         zr = z[0::2]
         cc = cross_correlation(zr, yr)
-        delays[ii] = cc.argmax() - zr.size + 1
+        ccmax = abs(cc)
+        delays[ii] = ccmax.argmax() - zr.size + 1
         ii += 1
     # get mean from all repetitions
     delay = np.mean(delays)
