@@ -50,6 +50,7 @@ def cross_correlation(a:np.ndarray, b:np.ndarray) -> np.ndarray:
 
 
 def send_and_receive_signal(args):
+    bw = 1 / args.symbol_duration + 1e6
     command = ['sudo', 'build/trx_timed_samples'] 
     if args.usrp_type == 'x300':
         command += ['--subdev', 'A:0']
@@ -57,12 +58,13 @@ def send_and_receive_signal(args):
         command += ['--subdev', 'A:A']
     command += ['--rate', f'{args.sample_freq}']
     command += ['--freq', f'{args.center_freq}']
-    command += ['--bw', '20e6']
+    command += ['--bw', f'{bw}']
     command += ['--args', f'"type={args.usrp_type}"']
     command += ['--first-sample-time', '0.1']
     command += ['--rx-gain', f'{args.rx_gain}']
     command += ['--tx-gain', f'{args.tx_gain}']
     command += ['--spb', f'{args.tx_samples}']
+    command += ['--repeat', f'{args.repeat}']
     print("Sending and receiving samples")
     command_to_run = f"""{' '.join(command)}"""
     return os.system(command_to_run)
