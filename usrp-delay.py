@@ -64,8 +64,6 @@ def tx_usrp_samples(usrp, tx_streamer, tx_vector:np.ndarray, tx_time:uhd.types.T
             logger.error("Didn't send all samples in buffer")
             result.append(0)
             return
-        else:
-            logger.info("Sent %d samples at ts %d", num_tx_samps, metadata.time_spec.to_ticks(rate))
         repeat_cnt += 1
         new_time = uhd.types.TimeSpec.from_ticks(start_time_ticks + repeat_cnt * tx_vector.size, rate)
         metadata.time_spec = new_time
@@ -120,6 +118,7 @@ def setup_usrp(args):
         return False
 
     usrp.set_master_clock_rate(args.sample_freq)
+    logger.info("Master clock is set to %f", usrp.get_master_clock_rate())
     return usrp
 
 def send_and_receive_signal(usrp, args, tx_vector:np.ndarray, rx_vector:np.ndarray, rx_time:uhd.types.TimeSpec):
@@ -135,8 +134,9 @@ def send_and_receive_signal(usrp, args, tx_vector:np.ndarray, rx_vector:np.ndarr
     st_args.channels = [0]
     st_args.args = uhd.types.DeviceAddr("")
 
-    rx_time_ticks = rx_time.to_ticks(args.sample_freq) - 1000 # start stream sooner
-    rx_stream_time = uhd.types.TimeSpec.from_ticks(rx_time_ticks, args.sample_freq)
+    rate = usrp.get_tx_rate()
+    rx_time_ticks = rx_time.to_ticks(rate) - 1000 # start stream sooner
+    rx_stream_time = uhd.types.TimeSpec.from_ticks(rx_time_ticks, rate)
     rx_streamer = usrp.get_rx_stream(st_args)
     rx_results = []
     rx_thread = br.threading.Thread(target=rx_usrp_samples,
@@ -179,10 +179,11 @@ def send_and_receive_signal_single(args):
 
 def test(args):
     usrp = setup_usrp(args)
+    rate = usrp.get_tx_rate()
 
     d = PSG.get_d_sequence(args.nid)
     x = np.array(d, dtype=np.float32) # convert int to float array
-    y = get_signal_vector(args.symbol_duration, args.sample_freq, x, False)
+    y = get_signal_vector(args.symbol_duration, rate, x, False)
     write_vector_to_file(args.write_file, y)
     args.tx_samples = y.size
 
@@ -197,7 +198,7 @@ def test(args):
     else:
         print("Success in sending and receiving samples")
     actual_rx_ts = rx_results[1]
-    tx_time_tx = tx_time.to_ticks(args.sample_freq)
+    tx_time_tx = tx_time.to_ticks(rate)
     buff_offset = tx_time_tx - actual_rx_ts
     print(f"Buffer offset is {buff_offset}")
     if buff_offset < 0:
@@ -220,7 +221,7 @@ def test(args):
         ii += 1
     # get mean from all repetitions
     delay = np.mean(delays)
-    delay_time = delay * (1/args.sample_freq)
+    delay_time = delay * (1/rate)
     delays
 
     cc_x_plot = [yr.size - x for x in range(cc.size)]
