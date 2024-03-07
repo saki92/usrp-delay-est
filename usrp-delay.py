@@ -119,14 +119,14 @@ def setup_usrp(args):
 
     usrp.set_master_clock_rate(args.sample_freq)
     logger.info("Master clock is set to %f", usrp.get_master_clock_rate())
+    usrp.set_rx_rate(args.sample_freq)
+    usrp.set_tx_rate(args.sample_freq)
     return usrp
 
 def send_and_receive_signal(usrp, args, tx_vector:np.ndarray, rx_vector:np.ndarray, rx_time:uhd.types.TimeSpec):
     usrp.set_time_now(uhd.types.TimeSpec(0.0))
     threads = []
     quit_event = br.threading.Event()
-    usrp.set_rx_rate(args.sample_freq)
-    usrp.set_tx_rate(args.sample_freq)
     bw = 1 / args.symbol_duration + 1e6
     usrp.set_rx_bandwidth(bw)
     usrp.set_tx_bandwidth(bw)
@@ -135,6 +135,7 @@ def send_and_receive_signal(usrp, args, tx_vector:np.ndarray, rx_vector:np.ndarr
     st_args.args = uhd.types.DeviceAddr("")
 
     rate = usrp.get_tx_rate()
+    logger.info("Set sampling rate is %f", rate)
     rx_time_ticks = rx_time.to_ticks(rate) - 1000 # start stream sooner
     rx_stream_time = uhd.types.TimeSpec.from_ticks(rx_time_ticks, rate)
     rx_streamer = usrp.get_rx_stream(st_args)
