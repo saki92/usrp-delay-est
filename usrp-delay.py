@@ -226,11 +226,12 @@ def test(args):
     delays
 
     cc_x_plot = [yr.size - x for x in range(cc.size)]
+    p = 5
     if args.plot:
         fig, axs = plt.subplots(3)
         fig.suptitle("Cross-correlation")
         axs[0].plot(range(yr.size), yr)
-        axs[1].plot(range(zin[n*y.size:(n+1)*y.size:2].size), zin[n*y.size:(n+1)*y.size].real)
+        axs[1].plot(range(zin[p*y.size:(p+1)*y.size].size), zin[p*y.size:(p+1)*y.size].real)
         axs[2].plot(cc_x_plot, cc)
         plt.show()
     else:
@@ -241,7 +242,7 @@ def test(args):
         print()
         print("Rx signal")
         fig2 = tplt.figure()
-        fig2.plot(range(zin[n*y.size:(n+1)*y.size:2].size), zin[n*y.size:(n+1)*y.size].real)
+        fig2.plot(range(zin[p*y.size:(p+1)*y.size].size), zin[p*y.size:(n+1)*p.size].real)
         fig2.show()
         print()
         print("Delay")
