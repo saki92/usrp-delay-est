@@ -121,10 +121,13 @@ def setup_usrp(args):
     logger.info("Master clock is set to %f", usrp.get_master_clock_rate())
     usrp.set_rx_rate(args.sample_freq)
     usrp.set_tx_rate(args.sample_freq)
+    usrp.set_tx_gain(args.tx_gain)
+    logger.info("Tx gain set to %f", usrp.get_tx_gain())
+    usrp.set_rx_gain(args.tx_gain)
+    logger.info("Rx gain set to %f", usrp.get_rx_gain())
     return usrp
 
 def send_and_receive_signal(usrp, args, tx_vector:np.ndarray, rx_vector:np.ndarray, rx_time:uhd.types.TimeSpec):
-    usrp.set_time_now(uhd.types.TimeSpec(0.0))
     threads = []
     quit_event = br.threading.Event()
     bw = 1 / args.symbol_duration + 1e6
@@ -185,11 +188,12 @@ def test(args):
     d = PSG.get_d_sequence(args.nid)
     x = np.array(d, dtype=np.float32) # convert int to float array
     y = get_signal_vector(args.symbol_duration, rate, x, False)
-    write_vector_to_file(args.write_file, y)
+    #write_vector_to_file(args.write_file, y)
     args.tx_samples = y.size
 
     recv_buff_size = y.size * args.repeat + 2000
     zin = np.empty((1, recv_buff_size), dtype=np.csingle)
+    usrp.set_time_now(uhd.types.TimeSpec(0.0))
     current_time = usrp.get_time_now()
     tx_time = uhd.types.TimeSpec(current_time.get_real_secs() + args.first_samp_time)
     [rx_results, tx_results] = send_and_receive_signal(usrp, args, y, zin, tx_time)
@@ -226,7 +230,7 @@ def test(args):
     delays
 
     cc_x_plot = [yr.size - x for x in range(cc.size)]
-    p = 5
+    p = args.repeat - 1
     if args.plot:
         fig, axs = plt.subplots(3)
         fig.suptitle("Cross-correlation")
@@ -242,7 +246,7 @@ def test(args):
         print()
         print("Rx signal")
         fig2 = tplt.figure()
-        fig2.plot(range(zin[p*y.size:(p+1)*y.size].size), zin[p*y.size:(n+1)*p.size].real)
+        fig2.plot(range(zin[p*y.size:(p+1)*y.size].size), zin[p*y.size:(p+1)*y.size].real)
         fig2.show()
         print()
         print("Delay")
