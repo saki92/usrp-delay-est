@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import termplotlib as tplt
 import uhd
 import benchmark_rate as br
+import time
 
 def get_signal_vector(s:float, f:float, x:np.ndarray, do_plot:bool) -> np.ndarray:
     samp_per_symb = int(s * f)
@@ -192,70 +193,87 @@ def test(args):
     args.tx_samples = y.size
 
     recv_buff_size = y.size * args.repeat + 2000
-    zin = np.empty((1, recv_buff_size), dtype=np.csingle)
-    usrp.set_time_now(uhd.types.TimeSpec(0.0))
-    current_time = usrp.get_time_now()
-    tx_time = uhd.types.TimeSpec(current_time.get_real_secs() + args.first_samp_time)
-    [rx_results, tx_results] = send_and_receive_signal(usrp, args, y, zin, tx_time)
-    if not rx_results[0] and not tx_results[0]:
-        print("Error in sending signal")
-        return -1
-    else:
-        print("Success in sending and receiving samples")
-    actual_rx_ts = rx_results[1]
-    tx_time_tx = tx_time.to_ticks(rate)
-    buff_offset = tx_time_tx - actual_rx_ts
-    print(f"Buffer offset is {buff_offset}")
-    if buff_offset < 0:
-        logger.error("Streaming started too late")
-        return False
-    yr = y.real
-    #zin = read_vector_from_file(args.read_file)
-    n = args.repeat - 1
-    delays = np.zeros(args.repeat - 2, dtype=int)
-    ii = 0
-    zin = np.transpose(zin[0, buff_offset:buff_offset + y.size * args.repeat])
-    for i in range(1,n):
-        z = zin[i*y.size:(i+1)*y.size] # nth repetition of received signal
-        # extact only real part of z
-        #zr = z[0::2]
-        zr = z.real
-        cc = cross_correlation(zr, yr)
-        ccmax = abs(cc)
-        delays[ii] = ccmax.argmax() - zr.size + 1
-        ii += 1
-    # get mean from all repetitions
-    delay = np.mean(delays)
-    delay_time = delay * (1/rate)
-    delays
+    zin_p = np.empty((1, recv_buff_size), dtype=np.csingle)
+    delay_trials = np.empty(args.num_trials, dtype=np.float32)
+    for nn in range(args.num_trials):
+        usrp.set_time_now(uhd.types.TimeSpec(0.0))
+        current_time = usrp.get_time_now()
+        zin = np.empty((1, recv_buff_size), dtype=np.csingle)
+        tx_time = uhd.types.TimeSpec(current_time.get_real_secs() + args.first_samp_time)
+        [rx_results, tx_results] = send_and_receive_signal(usrp, args, y, zin, tx_time)
+        if not rx_results[0] and not tx_results[0]:
+            print("Error in sending signal")
+            return -1
+        else:
+            print("Success in sending and receiving samples")
+        actual_rx_ts = rx_results[1]
+        tx_time_tx = tx_time.to_ticks(rate)
+        buff_offset = tx_time_tx - actual_rx_ts
+        print(f"Buffer offset is {buff_offset}")
+        if buff_offset < 0:
+            logger.error("Streaming started too late")
+            return False
+        yr = y.real
+        #zin = read_vector_from_file(args.read_file)
+        n = args.repeat - 1
+        delays = np.zeros(args.repeat - 2, dtype=int)
+        ii = 0
+        zin = np.transpose(zin[0, buff_offset:buff_offset + y.size * args.repeat])
+        for i in range(1,n):
+            z = zin[i*y.size:(i+1)*y.size] # nth repetition of received signal
+            # extact only real part of z
+            #zr = z[0::2]
+            zr = z.real
+            cc = cross_correlation(zr, yr)
+            ccmax = abs(cc)
+            delays[ii] = ccmax.argmax() - zr.size + 1
+            ii += 1
+        # get mean from all repetitions
+        delay = np.mean(delays)
+        delay_time = delay * (1/rate)
+        delay_trials[nn] = delay_time
+        time.sleep(args.period)
 
-    cc_x_plot = [yr.size - x for x in range(cc.size)]
-    p = args.repeat - 1
-    if args.plot:
-        fig, axs = plt.subplots(3)
-        fig.suptitle("Cross-correlation")
-        axs[0].plot(range(yr.size), yr)
-        axs[1].plot(range(zin[p*y.size:(p+1)*y.size].size), zin[p*y.size:(p+1)*y.size].real)
-        axs[2].plot(cc_x_plot, cc)
-        plt.show()
-    else:
-        print("Tx signal")
-        fig1 = tplt.figure()
-        fig1.plot(range(yr.size), yr)
-        fig1.show()
-        print()
-        print("Rx signal")
-        fig2 = tplt.figure()
-        fig2.plot(range(zin[p*y.size:(p+1)*y.size].size), zin[p*y.size:(p+1)*y.size].real)
-        fig2.show()
-        print()
-        print("Delay")
-        fig3 = tplt.figure()
-        fig3.plot(cc_x_plot, cc, label='Delay')
-        fig3.show()
+    zin_p = zin
+    if args.num_trials == 1:
+        cc_x_plot = [yr.size - x for x in range(cc.size)]
+        p = args.repeat - 1
+        if args.plot:
+            fig, axs = plt.subplots(3)
+            fig.suptitle("Cross-correlation")
+            axs[0].plot(range(yr.size), yr)
+            axs[1].plot(range(zin_p[p*y.size:(p+1)*y.size].size), zin_p[p*y.size:(p+1)*y.size].real)
+            axs[2].plot(cc_x_plot, cc)
+            plt.show()
+        else:
+            print("Tx signal")
+            fig1 = tplt.figure()
+            fig1.plot(range(yr.size), yr)
+            fig1.show()
+            print()
+            print("Rx signal")
+            fig2 = tplt.figure()
+            fig2.plot(range(zin_p[p*y.size:(p+1)*y.size].size), zin_p[p*y.size:(p+1)*y.size].real)
+            fig2.show()
+            print()
+            print("Delay")
+            fig3 = tplt.figure()
+            fig3.plot(cc_x_plot, cc, label='Delay')
+            fig3.show()
 
-    print()
-    print(f"The estimated delay is {delay} samples, {delay_time} seconds.")
+        print()
+        print(f"The estimated delay is {delay} samples, {delay_time} seconds.")
+
+    else:
+        if args.plot:
+            plt.plot(range(delay_trials.size), delay_trials)
+            plt.show()
+        else:
+            fig1 = tplt.figure()
+            fig1.plot(range(delay_trials.size), delay_trials)
+            fig1.show()
+            print()
+            print(f"The estimated average delay {np.mean(delay_trials)} seconds.")
 
 
 if __name__ == "__main__":
@@ -316,6 +334,15 @@ if __name__ == "__main__":
                         type=str,
                         default='internal',
                         help='USRP reference clock')
+    parser.add_argument('--num_trials',
+                        type=int,
+                        default=1,
+                        choices=range(1,100000),
+                        help='No of time to run the test')
+    parser.add_argument('--period',
+                        type=int,
+                        default=10,
+                        help='Time in seconds between each run')
     args = parser.parse_args()
 
     global logger
