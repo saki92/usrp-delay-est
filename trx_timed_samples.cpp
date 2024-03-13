@@ -71,7 +71,7 @@ void transmit_worker(const std::vector<std::complex<float> *> buffs,
     // send the entire contents of the buffer
     const int samples_sent = tx_streamer->send(buffs, samples_per_buff, md);
     if (samples_sent != samples_per_buff) {
-      std::cout << boost::format("TX-STREAM", "The tx_stream timed out sending")
+      std::cout << boost::format("TX-STREAM The tx_stream timed out sending")
                 << std::endl;
       return;
     }

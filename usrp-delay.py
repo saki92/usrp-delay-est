@@ -4,6 +4,7 @@ import PSSGenerator as PSG
 import numpy as np
 import matplotlib.pyplot as plt
 import termplotlib as tplt
+import time
 
 def get_signal_vector(s:float, f:float, x:np.ndarray, do_plot:bool) -> np.ndarray:
     samp_per_symb = int(s * f)
@@ -73,39 +74,51 @@ def test(args):
     d = PSG.get_d_sequence(args.nid)
     x = np.array(d, dtype=np.float32) # convert int to float array
     y = get_signal_vector(args.symbol_duration, args.sample_freq, x, False)
+    trial_cnt = 0
+    delays_trial = np.zeros(args.trials)
+    zp = np.zeros(y.size, dtype=np.float32)
     write_vector_to_file(args.write_file, y)
     args.tx_samples = y.size
-    # extact only real part of y
-    if send_and_receive_signal(args):
-        print("Error in sending signal")
-        return -1
-    else:
-        print("Success in sending and receiving samples")
     yr = y[0::2]
-    zin = read_vector_from_file(args.read_file)
-    n = args.repeat - 1
-    delays = np.zeros(args.repeat - 2, dtype=int)
-    ii = 0
-    for i in range(1,n):
-        z = zin[i*y.size:(i+1)*y.size] # nth repetition of received signal
-        # extact only real part of z
-        zr = z[0::2]
-        cc = cross_correlation(zr, yr)
-        ccmax = abs(cc)
-        delays[ii] = ccmax.argmax() - zr.size + 1
-        ii += 1
-    # get mean from all repetitions
-    delay = np.mean(delays)
-    delay_time = delay * (1/args.sample_freq)
-    delays
+    while trial_cnt < args.trials:
+        # extact only real part of y
+        if send_and_receive_signal(args):
+            print("Error in sending signal")
+            return -1
+        else:
+            print("Success in sending and receiving samples")
+        zin = read_vector_from_file(args.read_file)
+        n = args.repeat - 1
+        zp = zin[n*y.size:(n+1)*y.size:2]
+        delays = np.zeros(args.repeat - 2, dtype=int)
+        ii = 0
+        for i in range(1,n):
+            z = zin[i*y.size:(i+1)*y.size] # nth repetition of received signal
+            # extact only real part of z
+            zr = z[0::2]
+            cc = cross_correlation(zr, yr)
+            ccmax = abs(cc)
+            delays[ii] = ccmax.argmax() - zr.size + 1
+            ii += 1
+        # get mean from all repetitions
+        delay = np.mean(delays)
+        delay_time = delay * (1/args.sample_freq)
+        delays_trial[trial_cnt] = delay_time
+        if args.trials != 1:
+            time.sleep(args.period)
+        trial_cnt += 1
 
+    time_axis = np.array(range(0, args.period * args.trials, args.period))
+    data_to_file = np.vstack((time_axis, delays_trial))
+    np.savetxt(args.out_file, data_to_file, delimiter=',')
     cc_x_plot = [yr.size - x for x in range(cc.size)]
     if args.plot:
-        fig, axs = plt.subplots(3)
+        fig, axs = plt.subplots(4)
         fig.suptitle("Cross-correlation")
         axs[0].plot(range(yr.size), yr)
-        axs[1].plot(range(zin[n*y.size:(n+1)*y.size:2].size), zin[n*y.size:(n+1)*y.size:2])
+        axs[1].plot(range(zp.size), zp)
         axs[2].plot(cc_x_plot, cc)
+        axs[3].plot(time_axis, delays_trial)
         plt.show()
     else:
         print("Tx signal")
@@ -115,17 +128,21 @@ def test(args):
         print()
         print("Rx signal")
         fig2 = tplt.figure()
-        fig2.plot(range(zin[n*y.size:(n+1)*y.size:2].size), zin[n*y.size:(n+1)*y.size:2])
+        fig2.plot(range(zp.size), zp)
         fig2.show()
         print()
         print("Delay")
         fig3 = tplt.figure()
         fig3.plot(cc_x_plot, cc, label='Delay')
         fig3.show()
+        print();
+        print(f"Delays over trials with {args.period} periodicity.")
+        fig = tplt.figure()
+        fig.plot(time_axis, delays_trial)
+        fig.show()
 
     print()
     print(f"The estimated delay is {delay} samples, {delay_time} seconds.")
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Arguments for delay estimation tool')
@@ -173,5 +190,17 @@ if __name__ == "__main__":
                         type=float,
                         default=0,
                         help='USRP Tx gain')
+    parser.add_argument('--trials',
+                        type=int,
+                        default=1,
+                        help='Number of trials to run')
+    parser.add_argument('--period',
+                        type=int,
+                        default=30,
+                        help='Seconds between each trial')
+    parser.add_argument('--out_file',
+                        type=str,
+                        default='delays.csv',
+                        help='Output file to save the delays')
     args = parser.parse_args()
     test(args)
